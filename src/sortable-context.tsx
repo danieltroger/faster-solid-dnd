@@ -45,12 +45,11 @@ const SortableProvider: ParentComponent<SortableContextProps> = (props) => {
   });
 
   createEffect(() => {
-    console.log("effect re-running");
     if (dndState.active.draggableId && dndState.active.droppableId) {
       untrack(() => {
         const unwrapped = unwrap(state);
-        // Doing indexOf calls the getter of every item in the array which is slow, since this is untracked
-        // anyways we can gain lots of performance by calling indexOf on the unwrapped (original) array
+        // Doing indexOf calls the getter of every item in the array which is slow (because it's proxied), since this is untracked anyways,
+        // we can gain performance by calling indexOf on the unwrapped (original) array (I think)
         const fromIndex = unwrapped.sortedIds.indexOf(
           dndState.active.draggableId!
         );
