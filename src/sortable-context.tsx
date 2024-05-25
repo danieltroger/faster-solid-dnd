@@ -5,7 +5,7 @@ import {
   untrack,
   useContext,
 } from "solid-js";
-import { createStore, Store } from "solid-js/store";
+import { createStore, Store, unwrap } from "solid-js/store";
 
 import { Id, useDragDropContext } from "./drag-drop-context";
 import { moveArrayItem } from "./move-array-item";
@@ -31,6 +31,10 @@ const SortableProvider: ParentComponent<SortableContextProps> = (props) => {
     sortedIds: [],
   });
 
+  createEffect(() =>
+    console.log("Other state", JSON.parse(JSON.stringify(state)))
+  );
+
   const isValidIndex = (index: number): boolean => {
     return index >= 0 && index < state.initialIds.length;
   };
@@ -41,15 +45,27 @@ const SortableProvider: ParentComponent<SortableContextProps> = (props) => {
   });
 
   createEffect(() => {
+    console.log("effect re-running");
     if (dndState.active.draggableId && dndState.active.droppableId) {
       untrack(() => {
-        const fromIndex = state.sortedIds.indexOf(dndState.active.draggableId!);
-        const toIndex = state.initialIds.indexOf(dndState.active.droppableId!);
+        const unwrapped = unwrap(state);
+        // Doing indexOf calls the getter of every item in the array which is slow, since this is untracked
+        // anyways we can gain lots of performance by calling indexOf on the unwrapped (original) array
+        const fromIndex = unwrapped.sortedIds.indexOf(
+          dndState.active.draggableId!
+        );
+        const toIndex = unwrapped.initialIds.indexOf(
+          dndState.active.droppableId!
+        );
 
         if (!isValidIndex(fromIndex) || !isValidIndex(toIndex)) {
           setState("sortedIds", [...props.ids]);
         } else if (fromIndex !== toIndex) {
-          const resorted = moveArrayItem(state.sortedIds, fromIndex, toIndex);
+          const resorted = moveArrayItem(
+            unwrapped.sortedIds,
+            fromIndex,
+            toIndex
+          );
           setState("sortedIds", resorted);
         }
       });

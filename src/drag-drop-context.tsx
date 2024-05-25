@@ -2,6 +2,8 @@ import {
   batch,
   createContext,
   createEffect,
+  createMemo,
+  createSignal,
   mergeProps,
   ParentComponent,
   ParentProps,
@@ -153,32 +155,47 @@ const DragDropProvider: ParentComponent<DragDropContextProps> = (
     passedProps
   );
 
+  const [stateCreated, setStateCreated] = createSignal(false);
+  const draggableMemo = createMemo(() => {
+    if (!stateCreated()) return null;
+    return state.active.draggableId !== null
+      ? state.draggables[state.active.draggableId]
+      : null;
+  });
+  const dropableMemo = createMemo(() => {
+    if (!stateCreated()) return null;
+    return state.active.droppableId !== null
+      ? state.droppables[state.active.droppableId]
+      : null;
+  });
+  const sensorMemo = createMemo(() => {
+    if (!stateCreated()) return null;
+    return state.active.sensorId !== null
+      ? state.sensors[state.active.sensorId]
+      : null;
+  });
   const [state, setState] = createStore<DragDropState>({
     draggables: {},
     droppables: {},
     sensors: {},
     active: {
       draggableId: null,
+      // TODO: memoize/optimise
       get draggable(): Draggable | null {
-        return state.active.draggableId !== null
-          ? state.draggables[state.active.draggableId]
-          : null;
+        return draggableMemo();
       },
       droppableId: null,
       get droppable(): Droppable | null {
-        return state.active.droppableId !== null
-          ? state.droppables[state.active.droppableId]
-          : null;
+        return dropableMemo();
       },
       sensorId: null,
       get sensor(): Sensor | null {
-        return state.active.sensorId !== null
-          ? state.sensors[state.active.sensorId]
-          : null;
+        return sensorMemo();
       },
       overlay: null,
     },
   });
+  setStateCreated(true);
 
   const addTransformer: DragDropActions["addTransformer"] = (
     type,
@@ -239,6 +256,23 @@ const DragDropProvider: ParentComponent<DragDropContextProps> = (
     let transformer: Transformer | undefined;
 
     if (!existingDraggable) {
+      const getMemoValue = createMemo(() => {
+        if (state.active.overlay) {
+          return noopTransform();
+        }
+
+        const transformers = Object.values(
+          state.draggables[id]?.transformers || {}
+        );
+        transformers.sort((a, b) => a.order - b.order);
+
+        return transformers.reduce(
+          (transform: Transform, transformer: Transformer) => {
+            return transformer.callback(transform);
+          },
+          noopTransform()
+        );
+      });
       Object.defineProperties(draggable, {
         transformers: {
           enumerable: true,
@@ -249,23 +283,7 @@ const DragDropProvider: ParentComponent<DragDropContextProps> = (
         transform: {
           enumerable: true,
           configurable: true,
-          get: () => {
-            if (state.active.overlay) {
-              return noopTransform();
-            }
-
-            const transformers = Object.values(
-              state.draggables[id].transformers
-            );
-            transformers.sort((a, b) => a.order - b.order);
-
-            return transformers.reduce(
-              (transform: Transform, transformer: Transformer) => {
-                return transformer.callback(transform);
-              },
-              noopTransform()
-            );
-          },
+          get: getMemoValue,
         },
         transformed: {
           enumerable: true,
@@ -355,6 +373,20 @@ const DragDropProvider: ParentComponent<DragDropContextProps> = (
     };
 
     if (!existingDroppable) {
+      const getMemoValue = createMemo(() => {
+        // TODO: optimize/memoize
+        const transformers = Object.values(
+          state.droppables[id]?.transformers || {}
+        );
+        transformers.sort((a, b) => a.order - b.order);
+
+        return transformers.reduce(
+          (transform: Transform, transformer: Transformer) => {
+            return transformer.callback(transform);
+          },
+          noopTransform()
+        );
+      });
       Object.defineProperties(droppable, {
         transformers: {
           enumerable: true,
@@ -365,19 +397,7 @@ const DragDropProvider: ParentComponent<DragDropContextProps> = (
         transform: {
           enumerable: true,
           configurable: true,
-          get: () => {
-            const transformers = Object.values(
-              state.droppables[id].transformers
-            );
-            transformers.sort((a, b) => a.order - b.order);
-
-            return transformers.reduce(
-              (transform: Transform, transformer: Transformer) => {
-                return transformer.callback(transform);
-              },
-              noopTransform()
-            );
-          },
+          get: getMemoValue,
         },
         transformed: {
           enumerable: true,
